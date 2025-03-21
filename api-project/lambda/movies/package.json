@@ -1,0 +1,17 @@
+{
+  "name": "movies-lambda-function",
+  "version": "1.0.0",
+  "description": "Lambda处理电影数据的函数",
+  "main": "index.js",
+  "dependencies": {
+    "aws-sdk": "^2.1692.0",
+    "uuid": "^9.0.1"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "types": "./index.d.ts"
+}

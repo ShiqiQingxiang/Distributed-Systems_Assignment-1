@@ -3,6 +3,7 @@ import { Construct } from 'constructs';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as apigateway from 'aws-cdk-lib/aws-apigateway';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
+import * as lambdaNodejs from 'aws-cdk-lib/aws-lambda-nodejs';
 import * as path from 'path';
 
 export class ApiProjectStack extends cdk.Stack {
@@ -25,6 +26,8 @@ export class ApiProjectStack extends cdk.Stack {
       environment: {
         TABLE_NAME: moviesTable.tableName,
       },
+      timeout: cdk.Duration.seconds(30), // 增加Lambda超时时间
+      memorySize: 256, // 增加内存配置
     });
 
     // 授予Lambda函数对DynamoDB表的读写权限
