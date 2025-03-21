@@ -1,0 +1,71 @@
+## Distributed Systems - Assignment 1
+
+**Objective:** Demonstrate your understanding of the serverless services available on the AWS platform by designing and developing a skeleton REST API for a context of your choice (e.g. FYP). Your submission must use the CDK framework to provision the AWS resources the API requires.
+
+**Completion date:** 24/03/2025.
+
+**Weighting:** 30%.
+
+**Deliverables:**
+
+Submit a text file called to [this link](https://moodle.wit.ie/mod/assign/view.php?id=4472833) on Moodle. The file should contain:`assignment1.txt`
+
+- The URL of the GitHub repository.
+  - **Note**: To avoid plagiarism, you must set your repository visibility to PRIVATE. Shortly after the deadline, I will request that it be set to public visibility so I can assess it. It is not necessary to add me as a collaborator on your repo.
+- The URL of the YouTube video demonstrating the API.
+
+Notes:
+
+- The repo README is the documentation of the work you have carried out and must be complete and accurate. A template will be provided later.
+- Your repo’s Git log must have a clear, understandable and coherent history of the work on this assignment. The commit message must summarize the work performed (What task were you working on?) at each stage.
+
+### Detailed Specification
+
+The REST API (App API) should meet the following endpoint requirements:
+
+- A POST request to add an item to your database table.
+- A parameterized GET request to return a collection of table items, where the path parameter represents the table partition key value.
+- An extension of the above GET request to include a query string option for filtering the items.
+- A PUT request to update an item.
+- A Get request that returns an item with its main text attribute (see below) translated to a specified language, e.g. GET /things/{partition_key}/}sort_key}/translation?language=fr (French)
+
+#### DynamoDB table design
+
+The app requires one table with a composite primary key. The non-key attributes should include a mix of scalar data types (numeric, string, boolean) and one string-based attribute whose content is suitable for the translation feature (e.g. a description attribute).
+
+#### Authorization
+
+The POST and PUT endpoints should be protected. These requests should include an API key in the x-api-key HTTP request header. The CDK stack creates the key resource(s) at deployment time.
+
+#### Amazon Translate
+
+“Amazon Translate is a Neural Machine Translation (MT) service for translating text between supported languages … enabling developers to build applications requiring support across multiple languages. The service can be used via an API, enabling either real-time or batch translation of text from the source language to the target language.” [AWS Docs](https://docs.aws.amazon.com/translate/latest/dg/what-is.html)
+
+See [this video](https://completecoding.io/typescript-translation-api/) for a demonstration.
+
+Repeat requests to the Translate service for the same text translations should be avoided to reduce cost. Instead, the App API should persist translations to DynamoDB and use these to respond to repeat requests, i.e. a form of caching. Ideally, these should be stored in the same table as the source data.
+
+### Grading Spectrum
+
+**Good (40-50%):**
+
+- Functionality - Support for basic GET (no query string) and POST endpoints (no authorization required).
+- Database: Table design; Seeding.
+
+**Very Good (50-65%):**
+
+- Functionality - Extended GET (query string parameter), PUT and POST (no authentication), and translation endpoints.		
+
+**Excellent (65-85%):**
+
+- Authorization - Protected POST and PUT endpoints.
+- Performance - Persist translations to avoid repeat translation costs.
+
+**Outstanding (85%+):**
+
+- Design - Custom construct.
+- Infrastructure - Lambda layers or Multi-stack app.
+
+### Development strategy
+
+You should adopt an incremental approach to the development of this project. Each stage will involve the addition of infrastructure (CDK stack code) and backend functionality (Lambda functions). This approach should be evident in your repository log.
