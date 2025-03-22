@@ -1,17 +1,17 @@
-# 分布式系统 - 作业1
+# Distributed Systems - Assignment 1
 
-本项目实现了一个基于AWS无服务器架构的REST API，使用CDK框架配置和部署所需资源。
+This project implements a REST API based on AWS serverless architecture, using CDK framework to configure and deploy required resources.
 
-## 项目上下文
+## Project Context
 
-本API用于管理电影信息，提供以下功能：
-- 添加新电影
-- 获取电影列表
-- 按类别筛选电影
-- 更新电影信息
-- 获取电影描述的多语言翻译
+This API is used for managing movie information, providing the following features:
+- Add new movies
+- Retrieve movie list
+- Filter movies by category
+- Update movie information
+- Get multilingual translations of movie descriptions
 
-## 技术堆栈
+## Technology Stack
 
 - AWS CDK (TypeScript)
 - AWS Lambda
@@ -19,26 +19,49 @@
 - DynamoDB
 - AWS Translate
 
-## 开发阶段
+## API Endpoints
 
-### 阶段1：初始项目设置与基础架构
-- 初始化CDK项目
-- 设计和实现DynamoDB表
-- 创建基本的API结构
+API provides the following main endpoints:
 
-### 阶段2：基本功能实现
-- 实现POST请求添加电影
-- 实现基本GET请求获取电影列表
+- `GET /movies` - Get all movies
+- `GET /movies?category={category}` - Get movies by category
+- `GET /movies?id={id}` - Get specific movie details
+- `GET /movies/{category}/{id}/translation?language={language}` - Get translation of movie description
+- `POST /movies` - Add a new movie (requires API key)
+- `PUT /movies/{category}/{id}` - Update movie information (requires API key)
 
-### 阶段3：功能扩展
-- 实现查询参数筛选的GET请求
-- 实现PUT请求更新电影信息
-- 实现翻译功能
+## Feature Implementation
 
-### 阶段4：安全与授权
-- 添加API密钥授权
-- 保护POST和PUT端点
+### Movie Data Management
+- Movie data is stored in DynamoDB table, containing title, director, year, rating, description, translation cache content, etc.
+- Data is organized using partition key (category) and sort key (id)
+- Supports filtering by category and querying specific movies
 
-### 阶段5：性能优化
-- 实现翻译结果缓存
-- 优化DynamoDB查询
+### Translation Functionality
+- Uses AWS Translate service for real-time translation of movie descriptions
+- Supports multiple languages, including English (en), French (fr), German (de), Spanish (es), Japanese (ja), etc.
+- Implements translation result caching to avoid repeated translation requests
+
+### Security and Authorization
+- API key protection for sensitive endpoints
+- Only requests with valid API keys can add or modify movie data
+
+## Usage Instructions
+
+### Deploying the API
+```
+npm run cdk deploy
+```
+
+After deployment, the console will display the API endpoint URL and API key ID.
+
+### Testing the Translation Feature
+Use the following command to test the movie translation feature:
+```
+Invoke-RestMethod -Uri "https://[API_ENDPOINT]/movies/action/movie1/translation?language=en" -Method GET
+```
+
+You can try different movie categories, IDs, and target languages:
+```
+Invoke-RestMethod -Uri "https://[API_ENDPOINT]/movies/sci-fi/[movie-id]/translation?language=fr" -Method GET
+```
