@@ -2,27 +2,27 @@ import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import * as AWS from 'aws-sdk';
 import { v4 as uuidv4 } from 'uuid';
 
-// 确保全局错误被捕获
+// Ensure global errors are caught
 process.on('unhandledRejection', (reason, promise) => {
-  console.error('全局未处理的Promise拒绝:', reason);
+  console.error('Global unhandled Promise rejection:', reason);
 });
 
-// 配置重试机制
+// Configure retry mechanism
 AWS.config.update({
   maxRetries: 3,
   retryDelayOptions: { base: 200 },
-  region: process.env.AWS_REGION || 'eu-west-1' // 使用Lambda环境变量中的区域
+  region: process.env.AWS_REGION || 'eu-west-1' // Use region from Lambda environment variables
 });
 
-// 初始化服务客户端
+// Initialize service clients
 const dynamoDB = new AWS.DynamoDB.DocumentClient();
 const translate = new AWS.Translate({ apiVersion: '2017-07-01' });
 
-// 获取DynamoDB表名
+// Get DynamoDB table name
 const TABLE_NAME = process.env.TABLE_NAME || '';
 console.log('TABLE_NAME:', TABLE_NAME);
 
-// 定义电影类型
+// Define Movie type
 interface Movie {
   category: string;
   id: string;
@@ -72,7 +72,7 @@ const corsHeaders = {
 // 向DynamoDB添加电影
 async function addMovieToDB(movie: Movie): Promise<boolean> {
   if (!TABLE_NAME) {
-    console.log('TABLE_NAME环境变量未设置');
+    console.log('TABLE_NAME environment variable not set');
     return false;
   }
 
@@ -81,46 +81,46 @@ async function addMovieToDB(movie: Movie): Promise<boolean> {
       TableName: TABLE_NAME,
       Item: movie
     }).promise();
-    console.log('成功添加电影到DynamoDB:', movie.id);
+    console.log('Successfully added movie to DynamoDB:', movie.id);
     return true;
   } catch (error) {
-    console.error('添加电影到DynamoDB时出错:', error);
+    console.error('Error adding movie to DynamoDB:', error);
     return false;
   }
 }
 
 // 从DynamoDB获取电影
 async function getMovieFromDB(category: string, id: string): Promise<Movie | null> {
-  console.log('尝试从DynamoDB获取电影:', { category, id });
+  console.log('Attempting to get movie from DynamoDB:', { category, id });
   
   if (!TABLE_NAME) {
-    console.log('TABLE_NAME环境变量未设置，使用备用数据');
+    console.log('TABLE_NAME environment variable not set, using sample data');
     const movie = sampleMovies.find(m => m.id === id && m.category === category);
-    console.log('从备用数据中找到电影:', !!movie);
+    console.log('Found movie in sample data:', !!movie);
     return movie || null;
   }
 
   try {
-    console.log('查询DynamoDB表:', TABLE_NAME);
+    console.log('Querying DynamoDB table:', TABLE_NAME);
     const result = await dynamoDB.get({
       TableName: TABLE_NAME,
       Key: { category, id }
     }).promise();
     
     if (result.Item) {
-      console.log('从DynamoDB获取到电影:', id);
+      console.log('Found movie in DynamoDB:', id);
       return result.Item as Movie;
     }
     
-    console.log('在DynamoDB中未找到电影，尝试备用数据');
+    console.log('Movie not found in DynamoDB, attempting sample data');
     const movie = sampleMovies.find(m => m.id === id && m.category === category);
-    console.log('从备用数据中找到电影:', !!movie);
+    console.log('Found movie in sample data:', !!movie);
     return movie || null;
   } catch (error) {
-    console.error('从DynamoDB获取电影时出错，详细错误:', error);
-    console.log('尝试从备用数据中查找');
+    console.error('Error getting movie from DynamoDB, detailed error:', error);
+    console.log('Attempting to find movie in sample data');
     const movie = sampleMovies.find(m => m.id === id && m.category === category);
-    console.log('从备用数据中找到电影:', !!movie);
+    console.log('Found movie in sample data:', !!movie);
     return movie || null;
   }
 }
@@ -128,7 +128,7 @@ async function getMovieFromDB(category: string, id: string): Promise<Movie | nul
 // 直接通过ID获取电影（新增函数）
 async function getMovieByIdFromDB(id: string): Promise<Movie | null> {
   if (!TABLE_NAME) {
-    console.log('TABLE_NAME环境变量未设置，使用备用数据');
+    console.log('TABLE_NAME environment variable not set, using sample data');
     return sampleMovies.find(m => m.id === id) || null;
   }
 
@@ -143,14 +143,14 @@ async function getMovieByIdFromDB(id: string): Promise<Movie | null> {
     const result = await dynamoDB.scan(scanParams).promise();
     
     if (result.Items && result.Items.length > 0) {
-      console.log('从DynamoDB扫描到电影:', id);
+      console.log('Found movie in DynamoDB scan:', id);
       return result.Items[0] as Movie;
     }
     
-    console.log('在DynamoDB中未找到电影，使用备用数据');
+    console.log('Movie not found in DynamoDB, using sample data');
     return sampleMovies.find(m => m.id === id) || null;
   } catch (error) {
-    console.error('从DynamoDB获取电影时出错，使用备用数据:', error);
+    console.error('Error getting movie from DynamoDB, using sample data:', error);
     return sampleMovies.find(m => m.id === id) || null;
   }
 }
@@ -158,7 +158,7 @@ async function getMovieByIdFromDB(id: string): Promise<Movie | null> {
 // 从DynamoDB获取电影列表
 async function getMoviesFromDB(category?: string): Promise<Movie[]> {
   if (!TABLE_NAME) {
-    console.log('TABLE_NAME环境变量未设置，使用备用数据');
+    console.log('TABLE_NAME environment variable not set, using sample data');
     return category ? sampleMovies.filter(m => m.category === category) : sampleMovies;
   }
 
@@ -174,7 +174,7 @@ async function getMoviesFromDB(category?: string): Promise<Movie[]> {
       }).promise();
       
       items = result.Items || [];
-      console.log(`从DynamoDB获取到${items.length}部${category}类别的电影`);
+      console.log(`Found ${items.length} movies of category ${category} from DynamoDB`);
     } else {
       // 扫描所有电影
       const result = await dynamoDB.scan({
@@ -183,17 +183,17 @@ async function getMoviesFromDB(category?: string): Promise<Movie[]> {
       }).promise();
       
       items = result.Items || [];
-      console.log(`从DynamoDB扫描到${items.length}部电影`);
+      console.log(`Found ${items.length} movies from DynamoDB scan`);
     }
     
     if (items.length > 0) {
       return items as Movie[];
     }
     
-    console.log('DynamoDB中没有电影数据，使用备用数据');
+    console.log('DynamoDB has no movie data, using sample data');
     return category ? sampleMovies.filter(m => m.category === category) : sampleMovies;
   } catch (error) {
-    console.error('从DynamoDB获取电影列表时出错，使用备用数据:', error);
+    console.error('Error getting movie list from DynamoDB, using sample data:', error);
     return category ? sampleMovies.filter(m => m.category === category) : sampleMovies;
   }
 }
@@ -201,7 +201,7 @@ async function getMoviesFromDB(category?: string): Promise<Movie[]> {
 // 更新DynamoDB中的电影
 async function updateMovieInDB(category: string, id: string, updates: any): Promise<Movie | null> {
   if (!TABLE_NAME) {
-    console.log('TABLE_NAME环境变量未设置');
+    console.log('TABLE_NAME environment variable not set');
     return null;
   }
 
@@ -231,7 +231,7 @@ async function updateMovieInDB(category: string, id: string, updates: any): Prom
     
     // 检查是否有更新
     if (Object.keys(expressionAttributeValues).length === 0) {
-      console.log('没有提供要更新的字段');
+      console.log('No fields provided for update');
       return null;
     }
     
@@ -248,11 +248,11 @@ async function updateMovieInDB(category: string, id: string, updates: any): Prom
     };
     
     const result = await dynamoDB.update(params).promise();
-    console.log('成功更新DynamoDB中的电影:', id);
+    console.log('Successfully updated movie in DynamoDB:', id);
     
     return result.Attributes as Movie;
   } catch (error) {
-    console.error('更新DynamoDB中的电影时出错:', error);
+    console.error('Error updating movie in DynamoDB:', error);
     return null;
   }
 }
@@ -260,7 +260,7 @@ async function updateMovieInDB(category: string, id: string, updates: any): Prom
 // 使用Amazon Translate翻译文本
 async function translateText(text: string, targetLanguage: string): Promise<string> {
   if (!text || text.trim() === '') {
-    console.log('输入文本为空，无需翻译');
+    console.log('Input text is empty, no translation needed');
     return '';
   }
 
@@ -272,8 +272,8 @@ async function translateText(text: string, targetLanguage: string): Promise<stri
       TargetLanguageCode: targetLanguage
     };
     
-    console.log(`尝试翻译文本，参数:`, JSON.stringify(params));
-    console.log('当前AWS区域:', AWS.config.region);
+    console.log(`Attempting to translate text, parameters:`, JSON.stringify(params));
+    console.log('Current AWS region:', AWS.config.region);
     
     // 创建一个新的Translate客户端实例，确保区域正确
     const translateService = new AWS.Translate({ 
@@ -285,25 +285,25 @@ async function translateText(text: string, targetLanguage: string): Promise<stri
     // 使用promise语法执行翻译
     const result = await translateService.translateText(params).promise();
     
-    console.log('翻译成功，源语言:', result.SourceLanguageCode);
-    console.log('翻译结果:', result.TranslatedText);
+    console.log('Translation successful, source language:', result.SourceLanguageCode);
+    console.log('Translation result:', result.TranslatedText);
     
     return result.TranslatedText;
   } catch (error: any) {
-    console.error('翻译失败:', error);
-    console.error('错误类型:', error.name);
-    console.error('错误消息:', error.message);
-    console.error('错误代码:', error.code);
-    console.error('请求ID:', error.requestId);
+    console.error('Translation failed:', error);
+    console.error('Error type:', error.name);
+    console.error('Error message:', error.message);
+    console.error('Error code:', error.code);
+    console.error('Request ID:', error.requestId);
     
     // 返回格式化的错误消息
-    return `翻译失败: ${error.code ? `${error.code} - ` : ''}${error.message || '未知错误'}`;
+    return `Translation failed: ${error.code ? `${error.code} - ` : ''}${error.message || 'Unknown error'}`;
   }
 }
 
 // 处理API事件的主函数
 export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
-  console.log('收到请求:', JSON.stringify(event, null, 2));
+  console.log('Received request:', JSON.stringify(event, null, 2));
   
   // 处理CORS预检请求
   if (event.httpMethod === 'OPTIONS') {
@@ -318,12 +318,12 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     // 获取请求路径和方法
     const path = event.path || '';
     const method = event.httpMethod;
-    console.log('处理请求路径:', path, '方法:', method);
+    console.log('Processing request path:', path, 'method:', method);
     
     // 处理翻译请求 - 检查路径是否以 '/translation' 结尾
     if (path.endsWith('/translation') && method === 'GET') {
-      console.log('检测到翻译请求，路径:', path);
-      console.log('路径参数:', event.pathParameters);
+      console.log('Detected translation request, path:', path);
+      console.log('Path parameters:', event.pathParameters);
       
       // 首先尝试从API Gateway的路径参数中获取
       let id = event.pathParameters?.id;
@@ -331,27 +331,27 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       
       // 如果无法从pathParameters获取，则尝试从URL路径解析
       if (!id || !category) {
-        console.log('从pathParameters未获取到参数，尝试从URL路径解析');
+        console.log('No parameters found in pathParameters, attempting to parse from URL path');
         const pathParts = path.split('/').filter(part => part !== '');
-        console.log('路径分解:', pathParts);
+        console.log('Path decomposition:', pathParts);
         
         // 假设路径格式为 /movies/{category}/{id}/translation
         if (pathParts.length >= 4 && pathParts[0] === 'movies') {
           category = pathParts[1];
           id = pathParts[2];
-          console.log('从路径解析出的参数:', { category, id });
+          console.log('Extracted parameters from path:', { category, id });
         }
       }
       
       const language = event.queryStringParameters?.language || 'en';
-      console.log('翻译请求最终参数:', { category, id, language });
+      console.log('Translation request final parameters:', { category, id, language });
       
       if (!category || !id) {
-        console.error('无法获取category和id参数');
+        console.error('Unable to get category and id parameters');
         return {
           statusCode: 400,
           headers: corsHeaders,
-          body: JSON.stringify({ message: '无效的翻译请求路径，缺少类别或ID参数' })
+          body: JSON.stringify({ message: 'Invalid translation request path, missing category or ID parameter' })
         };
       }
       
@@ -363,7 +363,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         return {
           statusCode: 404,
           headers: corsHeaders,
-          body: JSON.stringify({ message: '电影不存在' })
+          body: JSON.stringify({ message: 'Movie not found' })
         };
       }
       
@@ -373,7 +373,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
           statusCode: 200,
           headers: corsHeaders,
           body: JSON.stringify({
-            message: '电影描述为空，无需翻译',
+            message: 'Movie description is empty, no translation needed',
             movie: {
               ...movie,
               translated_description: ''
@@ -384,12 +384,12 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       
       // 检查是否有缓存的翻译
       if (movie.translations && movie.translations[language]) {
-        console.log('使用缓存的翻译:', language);
+        console.log('Using cached translation:', language);
         return {
           statusCode: 200,
           headers: corsHeaders,
           body: JSON.stringify({
-            message: '使用缓存的翻译',
+            message: 'Using cached translation',
             movie: {
               ...movie,
               translated_description: movie.translations[language]
@@ -399,8 +399,8 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       }
       
       try {
-        console.log('尝试翻译描述，电影标题:', movie.title);
-        console.log('原始描述文本:', movie.description);
+        console.log('Attempting to translate description, movie title:', movie.title);
+        console.log('Original description text:', movie.description);
         
         // 创建一个新的Translate客户端实例，明确指定区域
         const translateClient = new AWS.Translate({ 
@@ -415,16 +415,16 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
           TargetLanguageCode: language
         };
         
-        console.log('翻译参数:', JSON.stringify(translateParams));
-        console.log('当前AWS区域:', AWS.config.region);
+        console.log('Translation parameters:', JSON.stringify(translateParams));
+        console.log('Current AWS region:', AWS.config.region);
         
         // 执行翻译请求
         const translateResult = await translateClient.translateText(translateParams).promise();
         
-        console.log('翻译服务结果:', JSON.stringify(translateResult));
+        console.log('Translation service result:', JSON.stringify(translateResult));
         const translatedText = translateResult.TranslatedText;
-        console.log('翻译成功，源语言:', translateResult.SourceLanguageCode);
-        console.log('翻译结果:', translatedText);
+        console.log('Translation successful, source language:', translateResult.SourceLanguageCode);
+        console.log('Translation result:', translatedText);
         
         // 初始化翻译缓存如果不存在
         if (!movie.translations) {
@@ -436,10 +436,10 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         
         // 尝试更新数据库，但不等待完成
         try {
-          console.log('尝试缓存翻译结果');
-          addMovieToDB(movie).catch(err => console.error('缓存翻译时出错:', err));
+          console.log('Attempting to cache translation result');
+          addMovieToDB(movie).catch(err => console.error('Error caching translation:', err));
         } catch (e) {
-          console.error('添加翻译缓存时出错:', e);
+          console.error('Error adding translation cache:', e);
         }
         
         // 返回翻译结果
@@ -447,7 +447,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
           statusCode: 200,
           headers: corsHeaders,
           body: JSON.stringify({
-            message: '翻译成功',
+            message: 'Translation successful',
             movie: {
               ...movie,
               translated_description: translatedText
@@ -455,21 +455,21 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
           })
         };
       } catch (translateError: any) {
-        console.error('翻译过程中出错:', translateError);
-        console.error('错误类型:', translateError.name);
-        console.error('错误消息:', translateError.message);
-        console.error('错误代码:', translateError.code);
-        console.error('请求ID:', translateError.requestId);
+        console.error('Error during translation:', translateError);
+        console.error('Error type:', translateError.name);
+        console.error('Error message:', translateError.message);
+        console.error('Error code:', translateError.code);
+        console.error('Request ID:', translateError.requestId);
         
         return {
           statusCode: 500,
           headers: corsHeaders,
           body: JSON.stringify({
-            message: '翻译服务出错',
+            message: 'Translation service error',
             error: `${translateError.code}: ${translateError.message}`,
             movie: {
               ...movie,
-              translated_description: `翻译失败: ${movie.description}`
+              translated_description: `Translation failed: ${movie.description}`
             }
           })
         };
@@ -480,12 +480,12 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     if (method === 'GET') {
       // 处理测试翻译端点
       if (path.endsWith('/test-translate')) {
-        console.log('检测到测试翻译请求');
+        console.log('Detected test translation request');
         
         const language = event.queryStringParameters?.language || 'en';
         const text = event.queryStringParameters?.text || '这是一个测试文本，用于测试Amazon Translate服务。';
         
-        console.log(`测试翻译请求：将文本"${text}"翻译为${language}`);
+        console.log(`Test translation request: Translating text "${text}" to ${language}`);
         
         try {
           // 直接使用AWS.Translate服务进行翻译，避免使用translateText函数
@@ -495,8 +495,8 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
             TargetLanguageCode: language
           };
           
-          console.log('翻译参数:', JSON.stringify(translateParams));
-          console.log('当前AWS区域:', AWS.config.region);
+          console.log('Translation parameters:', JSON.stringify(translateParams));
+          console.log('Current AWS region:', AWS.config.region);
           
           const translateClient = new AWS.Translate({ 
             apiVersion: '2017-07-01',
@@ -504,13 +504,13 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
           });
           
           const translateResult = await translateClient.translateText(translateParams).promise();
-          console.log('翻译服务结果:', JSON.stringify(translateResult));
+          console.log('Translation service result:', JSON.stringify(translateResult));
           
           return {
             statusCode: 200,
             headers: corsHeaders,
             body: JSON.stringify({
-              message: '测试翻译请求成功',
+              message: 'Test translation request successful',
               original: text,
               translated: translateResult.TranslatedText,
               sourceLanguage: translateResult.SourceLanguageCode,
@@ -518,17 +518,17 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
             })
           };
         } catch (err: any) {
-          console.error('测试翻译请求失败:', err);
-          console.error('错误类型:', err.name);
-          console.error('错误消息:', err.message);
-          console.error('错误代码:', err.code);
-          console.error('请求ID:', err.requestId);
+          console.error('Test translation request failed:', err);
+          console.error('Error type:', err.name);
+          console.error('Error message:', err.message);
+          console.error('Error code:', err.code);
+          console.error('Request ID:', err.requestId);
           
           return {
             statusCode: 500,
             headers: corsHeaders,
             body: JSON.stringify({
-              message: '测试翻译请求失败',
+              message: 'Test translation request failed',
               error: `${err.code}: ${err.message}`,
               original: text,
               language
@@ -542,7 +542,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       
       // 如果提供了ID，返回单个电影
       if (id) {
-        console.log('通过ID查询电影:', id);
+        console.log('Querying movie by ID:', id);
         
         // 使用getMovieByIdFromDB函数获取电影
         const movie = await getMovieByIdFromDB(id);
@@ -552,7 +552,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
           return {
             statusCode: 404,
             headers: corsHeaders,
-            body: JSON.stringify({ message: '电影不存在' })
+            body: JSON.stringify({ message: 'Movie not found' })
           };
         }
         
@@ -568,7 +568,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       
       // 如果从DynamoDB获取失败或没有结果，使用备用数据
       if (movies.length === 0) {
-        console.log('从DynamoDB获取电影列表失败或无结果，使用备用数据');
+        console.log('Failed to get movie list from DynamoDB, using sample data');
         
         if (category) {
           movies = sampleMovies.filter(m => m.category === category);
@@ -594,7 +594,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
           return {
             statusCode: 400,
             headers: corsHeaders,
-            body: JSON.stringify({ message: '标题、类别和描述是必填字段' })
+            body: JSON.stringify({ message: 'Title, category, and description are required fields' })
           };
         }
         
@@ -619,16 +619,16 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
           statusCode: 201,
           headers: corsHeaders,
           body: JSON.stringify({ 
-            message: saveResult ? '电影成功添加到数据库' : '电影已创建但未能保存到数据库', 
+            message: saveResult ? 'Movie successfully added to database' : 'Movie created but not saved to database', 
             movie 
           })
         };
       } catch (parseError) {
-        console.error('解析请求体时出错:', parseError);
+        console.error('Error parsing request body:', parseError);
         return {
           statusCode: 400,
           headers: corsHeaders,
-          body: JSON.stringify({ message: '无效的请求体格式' })
+          body: JSON.stringify({ message: 'Invalid request body format' })
         };
       }
     }
@@ -642,7 +642,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         return {
           statusCode: 400,
           headers: corsHeaders,
-          body: JSON.stringify({ message: '缺少类别或ID参数' })
+          body: JSON.stringify({ message: 'Missing category or ID parameter' })
         };
       }
       
@@ -661,7 +661,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
             return {
               statusCode: 404,
               headers: corsHeaders,
-              body: JSON.stringify({ message: '电影不存在' })
+              body: JSON.stringify({ message: 'Movie not found' })
             };
           }
           
@@ -684,7 +684,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
             statusCode: 200,
             headers: corsHeaders,
             body: JSON.stringify({ 
-              message: '电影更新未能保存到数据库，但这是更新后的数据', 
+              message: 'Movie update not saved to database, but this is the updated data', 
               movie: fallbackMovie 
             })
           };
@@ -694,16 +694,16 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
           statusCode: 200,
           headers: corsHeaders,
           body: JSON.stringify({ 
-            message: '电影成功更新', 
+            message: 'Movie successfully updated', 
             movie: updatedMovie 
           })
         };
       } catch (parseError) {
-        console.error('解析请求体时出错:', parseError);
+        console.error('Error parsing request body:', parseError);
         return {
           statusCode: 400,
           headers: corsHeaders,
-          body: JSON.stringify({ message: '无效的请求体格式' })
+          body: JSON.stringify({ message: 'Invalid request body format' })
         };
       }
     }
@@ -712,17 +712,17 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     return {
       statusCode: 405,
       headers: corsHeaders,
-      body: JSON.stringify({ message: `不支持的HTTP方法: ${method}` })
+      body: JSON.stringify({ message: `Unsupported HTTP method: ${method}` })
     };
   } catch (error) {
-    console.error('处理请求时出错:', error);
+    console.error('Error processing request:', error);
     
     // 确保无论发生什么错误，总是返回示例数据
     return {
       statusCode: 200, // 始终返回200
       headers: corsHeaders,
       body: JSON.stringify({ 
-        message: '请求处理过程中遇到错误，返回备用数据',
+        message: 'An error occurred during request processing, returning sample data',
         movies: sampleMovies
       })
     };
