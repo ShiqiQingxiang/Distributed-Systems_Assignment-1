@@ -11,12 +11,12 @@ process.on('unhandledRejection', (reason, promise) => {
 AWS.config.update({
   maxRetries: 3,
   retryDelayOptions: { base: 200 },
-  region: 'eu-west-1' // 显式设置区域
+  region: process.env.AWS_REGION || 'eu-west-1' // 使用Lambda环境变量中的区域
 });
 
 // 初始化服务客户端
 const dynamoDB = new AWS.DynamoDB.DocumentClient();
-const translate = new AWS.Translate();
+const translate = new AWS.Translate({ apiVersion: '2017-07-01' });
 
 // 获取DynamoDB表名
 const TABLE_NAME = process.env.TABLE_NAME || '';
@@ -44,9 +44,9 @@ const sampleMovies: Movie[] = [
     director: '沃卓斯基姐妹',
     year: 1999,
     rating: 8.7,
-    description: '一个计算机黑客了解到现实的真相。',
+    description: '一个计算机黑客了解到现实世界的真相，并加入对抗机器人的反抗军。',
     isAvailable: true,
-    translations: { 'en': 'A computer hacker learns about the true nature of reality.' }
+    translations: { 'en': 'A computer hacker learns about the true nature of reality and joins a rebellion against machines.' }
   },
   {
     id: 'movie2',
@@ -55,9 +55,9 @@ const sampleMovies: Movie[] = [
     director: '弗兰克·德拉邦特',
     year: 1994,
     rating: 9.3,
-    description: '两个被监禁的人在多年中建立友谊。',
+    description: '两个被监禁的人在数十年的时间里建立了非凡的友谊，在绝望中找到了希望。',
     isAvailable: true,
-    translations: { 'en': 'Two imprisoned men bond over a number of years.' }
+    translations: { 'en': 'Two imprisoned men bond over a number of years, finding solace and eventual redemption through acts of common decency.' }
   }
 ];
 
@@ -91,12 +91,17 @@ async function addMovieToDB(movie: Movie): Promise<boolean> {
 
 // 从DynamoDB获取电影
 async function getMovieFromDB(category: string, id: string): Promise<Movie | null> {
+  console.log('尝试从DynamoDB获取电影:', { category, id });
+  
   if (!TABLE_NAME) {
     console.log('TABLE_NAME环境变量未设置，使用备用数据');
-    return sampleMovies.find(m => m.id === id && m.category === category) || null;
+    const movie = sampleMovies.find(m => m.id === id && m.category === category);
+    console.log('从备用数据中找到电影:', !!movie);
+    return movie || null;
   }
 
   try {
+    console.log('查询DynamoDB表:', TABLE_NAME);
     const result = await dynamoDB.get({
       TableName: TABLE_NAME,
       Key: { category, id }
@@ -107,11 +112,16 @@ async function getMovieFromDB(category: string, id: string): Promise<Movie | nul
       return result.Item as Movie;
     }
     
-    console.log('在DynamoDB中未找到电影，使用备用数据');
-    return sampleMovies.find(m => m.id === id && m.category === category) || null;
+    console.log('在DynamoDB中未找到电影，尝试备用数据');
+    const movie = sampleMovies.find(m => m.id === id && m.category === category);
+    console.log('从备用数据中找到电影:', !!movie);
+    return movie || null;
   } catch (error) {
-    console.error('从DynamoDB获取电影时出错，使用备用数据:', error);
-    return sampleMovies.find(m => m.id === id && m.category === category) || null;
+    console.error('从DynamoDB获取电影时出错，详细错误:', error);
+    console.log('尝试从备用数据中查找');
+    const movie = sampleMovies.find(m => m.id === id && m.category === category);
+    console.log('从备用数据中找到电影:', !!movie);
+    return movie || null;
   }
 }
 
@@ -249,19 +259,45 @@ async function updateMovieInDB(category: string, id: string, updates: any): Prom
 
 // 使用Amazon Translate翻译文本
 async function translateText(text: string, targetLanguage: string): Promise<string> {
+  if (!text || text.trim() === '') {
+    console.log('输入文本为空，无需翻译');
+    return '';
+  }
+
   try {
+    // 设置翻译参数
     const params = {
       Text: text,
-      SourceLanguageCode: 'auto',
+      SourceLanguageCode: 'auto', // 自动检测源语言
       TargetLanguageCode: targetLanguage
     };
     
-    const result = await translate.translateText(params).promise();
-    console.log('成功翻译文本到', targetLanguage);
+    console.log(`尝试翻译文本，参数:`, JSON.stringify(params));
+    console.log('当前AWS区域:', AWS.config.region);
+    
+    // 创建一个新的Translate客户端实例，确保区域正确
+    const translateService = new AWS.Translate({ 
+      apiVersion: '2017-07-01',
+      region: process.env.AWS_REGION || 'eu-west-1',
+      maxRetries: 3
+    });
+    
+    // 使用promise语法执行翻译
+    const result = await translateService.translateText(params).promise();
+    
+    console.log('翻译成功，源语言:', result.SourceLanguageCode);
+    console.log('翻译结果:', result.TranslatedText);
+    
     return result.TranslatedText;
-  } catch (error) {
-    console.error('翻译文本时出错，返回默认翻译:', error);
-    return `Translated version of: ${text}`;
+  } catch (error: any) {
+    console.error('翻译失败:', error);
+    console.error('错误类型:', error.name);
+    console.error('错误消息:', error.message);
+    console.error('错误代码:', error.code);
+    console.error('请求ID:', error.requestId);
+    
+    // 返回格式化的错误消息
+    return `翻译失败: ${error.code ? `${error.code} - ` : ''}${error.message || '未知错误'}`;
   }
 }
 
@@ -282,19 +318,40 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     // 获取请求路径和方法
     const path = event.path || '';
     const method = event.httpMethod;
-    const isTranslationRequest = path.includes('/translation');
+    console.log('处理请求路径:', path, '方法:', method);
     
-    // 处理翻译请求
-    if (isTranslationRequest && method === 'GET') {
-      const category = event.pathParameters?.category;
-      const id = event.pathParameters?.id;
+    // 处理翻译请求 - 检查路径是否以 '/translation' 结尾
+    if (path.endsWith('/translation') && method === 'GET') {
+      console.log('检测到翻译请求，路径:', path);
+      console.log('路径参数:', event.pathParameters);
+      
+      // 首先尝试从API Gateway的路径参数中获取
+      let id = event.pathParameters?.id;
+      let category = event.pathParameters?.category;
+      
+      // 如果无法从pathParameters获取，则尝试从URL路径解析
+      if (!id || !category) {
+        console.log('从pathParameters未获取到参数，尝试从URL路径解析');
+        const pathParts = path.split('/').filter(part => part !== '');
+        console.log('路径分解:', pathParts);
+        
+        // 假设路径格式为 /movies/{category}/{id}/translation
+        if (pathParts.length >= 4 && pathParts[0] === 'movies') {
+          category = pathParts[1];
+          id = pathParts[2];
+          console.log('从路径解析出的参数:', { category, id });
+        }
+      }
+      
       const language = event.queryStringParameters?.language || 'en';
+      console.log('翻译请求最终参数:', { category, id, language });
       
       if (!category || !id) {
+        console.error('无法获取category和id参数');
         return {
           statusCode: 400,
           headers: corsHeaders,
-          body: JSON.stringify({ message: '缺少类别或ID参数' })
+          body: JSON.stringify({ message: '无效的翻译请求路径，缺少类别或ID参数' })
         };
       }
       
@@ -310,8 +367,24 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         };
       }
       
+      // 检查描述字段是否存在且非空
+      if (!movie.description || movie.description.trim() === '') {
+        return {
+          statusCode: 200,
+          headers: corsHeaders,
+          body: JSON.stringify({
+            message: '电影描述为空，无需翻译',
+            movie: {
+              ...movie,
+              translated_description: ''
+            }
+          })
+        };
+      }
+      
       // 检查是否有缓存的翻译
       if (movie.translations && movie.translations[language]) {
+        console.log('使用缓存的翻译:', language);
         return {
           statusCode: 200,
           headers: corsHeaders,
@@ -325,40 +398,145 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         };
       }
       
-      // 尝试翻译描述 (translateText会返回默认翻译如果失败)
-      const translatedText = await translateText(movie.description, language);
-      
-      // 初始化翻译缓存如果不存在
-      if (!movie.translations) {
-        movie.translations = {};
-      }
-      
-      // 添加新翻译到缓存
-      movie.translations[language] = translatedText;
-      
-      // 尝试更新数据库，但不等待完成
       try {
-        addMovieToDB(movie).catch(err => console.error('缓存翻译时出错:', err));
-      } catch (e) {
-        console.error('添加翻译缓存时出错:', e);
+        console.log('尝试翻译描述，电影标题:', movie.title);
+        console.log('原始描述文本:', movie.description);
+        
+        // 创建一个新的Translate客户端实例，明确指定区域
+        const translateClient = new AWS.Translate({ 
+          apiVersion: '2017-07-01',
+          region: process.env.AWS_REGION || 'eu-west-1'
+        });
+        
+        // 设置翻译参数
+        const translateParams = {
+          Text: movie.description,
+          SourceLanguageCode: 'auto', // 自动检测源语言
+          TargetLanguageCode: language
+        };
+        
+        console.log('翻译参数:', JSON.stringify(translateParams));
+        console.log('当前AWS区域:', AWS.config.region);
+        
+        // 执行翻译请求
+        const translateResult = await translateClient.translateText(translateParams).promise();
+        
+        console.log('翻译服务结果:', JSON.stringify(translateResult));
+        const translatedText = translateResult.TranslatedText;
+        console.log('翻译成功，源语言:', translateResult.SourceLanguageCode);
+        console.log('翻译结果:', translatedText);
+        
+        // 初始化翻译缓存如果不存在
+        if (!movie.translations) {
+          movie.translations = {};
+        }
+        
+        // 添加新翻译到缓存
+        movie.translations[language] = translatedText;
+        
+        // 尝试更新数据库，但不等待完成
+        try {
+          console.log('尝试缓存翻译结果');
+          addMovieToDB(movie).catch(err => console.error('缓存翻译时出错:', err));
+        } catch (e) {
+          console.error('添加翻译缓存时出错:', e);
+        }
+        
+        // 返回翻译结果
+        return {
+          statusCode: 200,
+          headers: corsHeaders,
+          body: JSON.stringify({
+            message: '翻译成功',
+            movie: {
+              ...movie,
+              translated_description: translatedText
+            }
+          })
+        };
+      } catch (translateError: any) {
+        console.error('翻译过程中出错:', translateError);
+        console.error('错误类型:', translateError.name);
+        console.error('错误消息:', translateError.message);
+        console.error('错误代码:', translateError.code);
+        console.error('请求ID:', translateError.requestId);
+        
+        return {
+          statusCode: 500,
+          headers: corsHeaders,
+          body: JSON.stringify({
+            message: '翻译服务出错',
+            error: `${translateError.code}: ${translateError.message}`,
+            movie: {
+              ...movie,
+              translated_description: `翻译失败: ${movie.description}`
+            }
+          })
+        };
       }
-      
-      // 返回翻译结果
-      return {
-        statusCode: 200,
-        headers: corsHeaders,
-        body: JSON.stringify({
-          message: '翻译成功',
-          movie: {
-            ...movie,
-            translated_description: translatedText
-          }
-        })
-      };
     }
     
     // 处理GET请求 - 获取电影列表
     if (method === 'GET') {
+      // 处理测试翻译端点
+      if (path.endsWith('/test-translate')) {
+        console.log('检测到测试翻译请求');
+        
+        const language = event.queryStringParameters?.language || 'en';
+        const text = event.queryStringParameters?.text || '这是一个测试文本，用于测试Amazon Translate服务。';
+        
+        console.log(`测试翻译请求：将文本"${text}"翻译为${language}`);
+        
+        try {
+          // 直接使用AWS.Translate服务进行翻译，避免使用translateText函数
+          const translateParams = {
+            Text: text,
+            SourceLanguageCode: 'auto',
+            TargetLanguageCode: language
+          };
+          
+          console.log('翻译参数:', JSON.stringify(translateParams));
+          console.log('当前AWS区域:', AWS.config.region);
+          
+          const translateClient = new AWS.Translate({ 
+            apiVersion: '2017-07-01',
+            region: process.env.AWS_REGION || 'eu-west-1'
+          });
+          
+          const translateResult = await translateClient.translateText(translateParams).promise();
+          console.log('翻译服务结果:', JSON.stringify(translateResult));
+          
+          return {
+            statusCode: 200,
+            headers: corsHeaders,
+            body: JSON.stringify({
+              message: '测试翻译请求成功',
+              original: text,
+              translated: translateResult.TranslatedText,
+              sourceLanguage: translateResult.SourceLanguageCode,
+              targetLanguage: language
+            })
+          };
+        } catch (err: any) {
+          console.error('测试翻译请求失败:', err);
+          console.error('错误类型:', err.name);
+          console.error('错误消息:', err.message);
+          console.error('错误代码:', err.code);
+          console.error('请求ID:', err.requestId);
+          
+          return {
+            statusCode: 500,
+            headers: corsHeaders,
+            body: JSON.stringify({
+              message: '测试翻译请求失败',
+              error: `${err.code}: ${err.message}`,
+              original: text,
+              language
+            })
+          };
+        }
+      }
+
       const category = event.queryStringParameters?.category;
       const id = event.queryStringParameters?.id;
       

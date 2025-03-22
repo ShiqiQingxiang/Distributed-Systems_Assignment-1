@@ -33,58 +33,93 @@ export class ApiProjectStack extends cdk.Stack {
     // 授予Lambda函数对DynamoDB表的读写权限
     moviesTable.grantReadWriteData(moviesLambda);
     
+    // 创建授权测试Lambda函数
+    const authTestLambda = new lambda.Function(this, 'AuthTestFunction', {
+      runtime: lambda.Runtime.NODEJS_18_X,
+      handler: 'auth-test.handler',
+      code: lambda.Code.fromAsset(path.join(__dirname, '..', 'lambda', 'movies')),
+      timeout: cdk.Duration.seconds(30),
+      memorySize: 256,
+    });
+    
     // 添加Lambda对Translate服务的访问权限
     moviesLambda.addToRolePolicy(new cdk.aws_iam.PolicyStatement({
-      actions: ['translate:TranslateText'],
+      actions: ['translate:TranslateText', 'comprehend:DetectDominantLanguage'],
       resources: ['*'],
+      effect: cdk.aws_iam.Effect.ALLOW
+    }));
+
+    // 创建专用翻译Lambda函数
+    const translateLambda = new lambda.Function(this, 'TranslateFunction', {
+      runtime: lambda.Runtime.NODEJS_18_X,
+      handler: 'translate-handler.handler',
+      code: lambda.Code.fromAsset(path.join(__dirname, '..', 'lambda', 'movies')),
+      environment: {
+        TABLE_NAME: moviesTable.tableName,
+      },
+      timeout: cdk.Duration.seconds(30),
+      memorySize: 256,
+    });
+    
+    // 添加翻译Lambda对Translate服务的访问权限
+    translateLambda.addToRolePolicy(new cdk.aws_iam.PolicyStatement({
+      actions: ['translate:TranslateText', 'comprehend:DetectDominantLanguage'],
+      resources: ['*'],
+      effect: cdk.aws_iam.Effect.ALLOW
     }));
 
     // 创建API Gateway
     const api = new apigateway.RestApi(this, 'MoviesApi', {
-      restApiName: 'Movies Service',
-      description: 'This service manages movies information.',
+      description: '电影API',
       deployOptions: {
         stageName: 'dev',
+        cachingEnabled: false,
       },
       defaultCorsPreflightOptions: {
         allowOrigins: apigateway.Cors.ALL_ORIGINS,
-        allowMethods: apigateway.Cors.ALL_METHODS,
-      },
-    });
-
-    // 创建API密钥
-    const apiKey = api.addApiKey('MoviesApiKey', {
-      apiKeyName: 'movies-api-key',
-      description: 'API Key for Movies Service',
-    });
-
-    // 创建用量计划
-    const plan = api.addUsagePlan('MoviesUsagePlan', {
-      name: 'Movies Usage Plan',
-      description: 'Usage plan for Movies API',
-      throttle: {
-        rateLimit: 10,
-        burstLimit: 20
-      },
-      quota: {
-        limit: 1000,
-        period: apigateway.Period.DAY
+        allowMethods: apigateway.Cors.ALL_METHODS
       }
     });
 
-    // 将API密钥添加到用量计划
+    // 创建API密钥
+    const apiKey = api.addApiKey('MovieApiKey');
+    
+    // 创建使用量计划
+    const plan = api.addUsagePlan('MovieApiUsagePlan', {
+      name: 'Standard',
+      description: '标准用量计划'
+    });
+    
+    // 将API密钥添加到使用量计划
     plan.addApiKey(apiKey);
-
-    // 将API阶段添加到用量计划
+    
+    // 将API阶段添加到使用量计划
     plan.addApiStage({
       stage: api.deploymentStage
     });
-
-    // 添加根资源路径（/movies）
+    
+    // 创建Lambda集成
+    const moviesIntegration = new apigateway.LambdaIntegration(moviesLambda);
+    
+    // 创建翻译Lambda集成
+    const translateIntegration = new apigateway.LambdaIntegration(translateLambda);
+    
+    // 创建授权测试Lambda集成
+    const authTestIntegration = new apigateway.LambdaIntegration(authTestLambda);
+    
+    // 添加API资源
     const moviesResource = api.root.addResource('movies');
     
-    // 添加集成
-    const moviesIntegration = new apigateway.LambdaIntegration(moviesLambda);
+    // 添加API测试资源
+    const authTestResource = api.root.addResource('auth-test');
+    
+    // 测试资源的GET方法 - 不需要API密钥
+    authTestResource.addMethod('GET', authTestIntegration);
+    
+    // 测试资源的POST方法 - 需要API密钥
+    authTestResource.addMethod('POST', authTestIntegration, {
+      apiKeyRequired: true
+    });
     
     // GET请求不需要API密钥
     moviesResource.addMethod('GET', moviesIntegration);
@@ -104,7 +139,15 @@ export class ApiProjectStack extends cdk.Stack {
     
     // 添加翻译资源
     const translationResource = movieResource.addResource('translation');
-    translationResource.addMethod('GET', moviesIntegration);
+    translationResource.addMethod('GET', translateIntegration);
+    
+    // 添加专用翻译端点
+    const translateResource = api.root.addResource('translate');
+    translateResource.addMethod('GET', translateIntegration);
+    
+    // 添加测试翻译的端点
+    const testTranslateResource = moviesResource.addResource('test-translate');
+    testTranslateResource.addMethod('GET', translateIntegration);
 
     // 导出DynamoDB表名和API URL
     new cdk.CfnOutput(this, 'TableName', {
