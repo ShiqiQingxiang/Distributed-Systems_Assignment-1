@@ -2,6 +2,8 @@
 
 This project implements a REST API based on AWS serverless architecture, using CDK framework to configure and deploy required resources.
 
+Demo video's link: https://youtu.be/zOl3yAh2E-A
+
 ## Project Context
 
 This API is used for managing movie information, providing the following features:
@@ -55,13 +57,3 @@ npm run cdk deploy
 
 After deployment, the console will display the API endpoint URL and API key ID.
 
-### Testing the Translation Feature
-Use the following command to test the movie translation feature:
-```
-Invoke-RestMethod -Uri "https://[API_ENDPOINT]/movies/action/movie1/translation?language=en" -Method GET
-```
-
-You can try different movie categories, IDs, and target languages:
-```
-Invoke-RestMethod -Uri "https://[API_ENDPOINT]/movies/sci-fi/[movie-id]/translation?language=fr" -Method GET
-```
