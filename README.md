@@ -1,7 +1,6 @@
 ## Serverless REST Assignment - Distributed Systems.
 
-__Name:__ Shi Qiqing
-
+__Name:__ Qingxiang Shiqi
 __Demo:__ https://youtu.be/zOl3yAh2E-A
 
 ### Context.
